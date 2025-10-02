@@ -1,0 +1,19 @@
+# Visual Studio 文件
+*.vcxproj
+*.vcxproj.user
+*.vcxproj.filters
+*.sln
+*.suo
+*.user
+
+# 构建目录
+Debug/
+Release/
+x64/
+bin/
+obj/
+
+# 其他常见忽略
+.DS_Store
+Thumbs.db
+*.log
