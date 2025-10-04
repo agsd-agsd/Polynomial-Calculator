@@ -1,6 +1,6 @@
 // Menu.cpp (更新版)
 // 要求：配合之前给出的 Polynomial.hpp / Polynomial.cpp 编译（C++17）
-
+// 新优化：简化用户输入(练习git常用操作)
 #include "Menu.hpp"
 #include "Polynomial.hpp"
 #include <iostream>
