@@ -1,4 +1,4 @@
-#ifndef POLYNOMIAL_HPP
+ï»¿#ifndef POLYNOMIAL_HPP
 #define POLYNOMIAL_HPP
 
 #include <iostream>
@@ -14,34 +14,39 @@ private:
         int exp;
         Term(long long c = 0, int e = 0) : coeff(c), exp(e) {}
     };
-    std::vector<Term> terms; // ±£³Ö°´Ö¸Êı½µĞòÇÒºÏ²¢ºóÎŞÁãÏµÊı
+    std::vector<Term> terms; // ä¿æŒæŒ‰æŒ‡æ•°é™åºä¸”åˆå¹¶åæ— é›¶ç³»æ•°
 
-    void simplify(); // ºÏ²¢Í¬ÀàÏî²¢°´Ö¸Êı½µĞòÅÅÁĞ
+    void simplify(); // åˆå¹¶åŒç±»é¡¹å¹¶æŒ‰æŒ‡æ•°é™åºæ’åˆ—
     bool isZero() const;
     int maxExp() const;
 
+    // è¾…åŠ©ï¼šå°†æŒ‡æ•°æ•°å­—è½¬ä¸º Unicode ä¸Šæ ‡å­—ç¬¦ä¸²ï¼ˆä¾‹å¦‚ 12 -> "Â¹Â²"ï¼‰
+    static std::string expToSuperscript(int e);
+
 public:
     Polynomial() = default;
-    Polynomial(const std::vector<long long>& seq); // ĞòÁĞ¸ñÊ½³õÊ¼»¯
+    Polynomial(const std::vector<long long>& seq); // åºåˆ—æ ¼å¼åˆå§‹åŒ–
 
-    // ÊäÈë·½Ê½£º°´´ÎÊı / °´ĞòÁĞ£¨¼æÈİÔ­Ê¼¸ñÊ½£©
-    void inputByDegree(std::istream& in = std::cin);   // ĞÂÊÖÍÆ¼ö£ºÏÈÊäÈë´ÎÊı£¬ÔÙ´Ó¸ßµ½µÍÊäÈëÏµÊı
-    void inputBySequence(std::istream& in = std::cin); // Ô­Ê¼£ºn c1 e1 c2 e2 ...
+    // è¾“å…¥æ–¹å¼ï¼šæŒ‰æ¬¡æ•°è¾“å…¥ï¼ˆå¯ä»¥æä¾› presetDegree ä»¥ä¾¿çˆ¶èœå•å…ˆæç¤ºå¹¶ä¼ å…¥ï¼‰
+    void inputByDegree(std::istream& in = std::cin, int presetDegree = -1);
 
-    // Êä³ö£ºÁ½ÖÖ¸ñÊ½
+    // è¾“å‡ºï¼šæœºå™¨åºåˆ— / äººç±»å¯è¯»ï¼ˆæ¼‚äº®ï¼‰å½¢å¼
     void printSequence(std::ostream& out = std::cout) const; // n c1 e1 ...
-    std::string toPrettyString() const;                      // ·µ»Ø ax^n + ... ×Ö·û´®
-    void printPretty(std::ostream& out = std::cout) const;   // Êä³ö pretty ×Ö·û´®
+    std::string toPrettyString() const;                      // è¿”å› 3xÂ² - x + 2 ä¹‹ç±»å­—ç¬¦ä¸²
+    void printPretty(std::ostream& out = std::cout) const;   // è¾“å‡º pretty å­—ç¬¦ä¸²
 
-    // »ù±¾ÔËËã
+    // åŸºæœ¬è¿ç®—
     Polynomial add(const Polynomial& other) const;
     Polynomial sub(const Polynomial& other) const;
     Polynomial multiply(const Polynomial& other) const;
-    // ³ı·¨£¨ÕûÏµÊı³¤³ı·¨£©¡£ÈôÎŞ·¨Õû³ıÄ³²½£¨leading coeff ·ÇÕû³ı£©£¬ÔòÍ£Ö¹²¢°Ñµ±Ç° dividend µ±ÓàÊı·µ»Ø
+    // é™¤æ³•ï¼ˆæ•´ç³»æ•°é•¿é™¤æ³•ï¼‰ã€‚è‹¥æ— æ³•æ•´é™¤æŸæ­¥ï¼ˆleading coeff éæ•´é™¤ï¼‰ï¼Œåˆ™åœæ­¢å¹¶æŠŠå½“å‰ dividend å½“ä½™æ•°è¿”å›
     std::pair<Polynomial, Polynomial> divide(const Polynomial& divisor) const;
 
-    // ÇóÖµ
+    // æ±‚å€¼
     long long evaluate(long long x) const;
+
+    // ä¾›å¤–éƒ¨æŸ¥çœ‹ï¼ˆè°ƒè¯•/æç¤ºï¼‰
+    bool empty() const { return terms.empty(); }
 };
 
 #endif

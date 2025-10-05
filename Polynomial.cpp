@@ -1,7 +1,8 @@
-#include "Polynomial.hpp"
+ï»¿#include "Polynomial.hpp"
 #include <sstream>
 #include <stdexcept>
 #include <cmath>
+#include <limits>
 
 using namespace std;
 
@@ -58,52 +59,81 @@ Polynomial::Polynomial(const vector<long long>& seq) {
     simplify();
 }
 
-void Polynomial::inputByDegree(istream& in) {
+void Polynomial::inputByDegree(istream& in, int presetDegree) {
     terms.clear();
-    cout << "¡¾°´´ÎÊıÊäÈë ¡ª ÍÆ¼ö¸øĞÂÊÖ¡¿\n";
-    cout << "ÇëÊäÈë¶àÏîÊ½µÄ×î¸ß´ÎÊı n£¨·Ç¸ºÕûÊı£¬ÀıÈç n=3 ±íÊ¾×î¸ßÏî x^3£©:\n";
-    int n;
-    while (!(in >> n) || n < 0) {
-        cout << "ÊäÈëÎŞĞ§£¬ÇëÊäÈë·Ç¸ºÕûÊı´ÎÊı n: ";
-        in.clear();
-        in.ignore(numeric_limits<streamsize>::max(), '\n');
-    }
-    cout << "½ÓÏÂÀ´ÇëÒÀ´ÎÊäÈëÏµÊı£¨´Ó x^" << n << " µ½ x^0£©£¬¿ÉÎªÕûÊı£¨°üÀ¨ 0 ºÍ¸ºÊı£©¡£\n";
-    for (int e = n; e >= 0; --e) {
-        cout << "ÏµÊı a_" << e << " (x^" << e << "): ";
-        long long c;
-        while (!(in >> c)) {
-            cout << "ÊäÈëÎŞĞ§£¬ÇëÊäÈëÕûÊıÏµÊı: ";
+    int n = presetDegree;
+    if (n < 0) {
+        // å¦‚æœæ²¡æœ‰é¢„è®¾ï¼Œåˆ™è‡ªå·±è¯¢é—®ï¼ˆå…¼å®¹æ—§é€»è¾‘ï¼‰
+        cout << "è¯·è¾“å…¥å¤šé¡¹å¼çš„æœ€é«˜æ¬¡æ•° nï¼ˆéè´Ÿæ•´æ•°ï¼Œä¾‹å¦‚ n=3 è¡¨ç¤ºæœ€é«˜é¡¹ x^3ï¼‰ã€‚è¾“å…¥ -1 å¯å–æ¶ˆï¼š ";
+        while (!(in >> n) || n < -1) {
+            cout << "è¾“å…¥æ— æ•ˆï¼Œè¯·è¾“å…¥éè´Ÿæ•´æ•° nï¼ˆæˆ– -1 å–æ¶ˆï¼‰ï¼š ";
             in.clear();
             in.ignore(numeric_limits<streamsize>::max(), '\n');
         }
-        if (c != 0) terms.emplace_back(c, e);
+        if (n == -1) {
+            cout << "å·²å–æ¶ˆè¾“å…¥ã€‚\n";
+            return;
+        }
     }
-    simplify();
-    cout << "ÊäÈëÍê³É¡£\n";
-}
 
-void Polynomial::inputBySequence(istream& in) {
-    terms.clear();
-    cout << "¡¾ĞòÁĞÊäÈë ¡ª ¼æÈİÔ­Ê¼¸ñÊ½¡¿\n";
-    cout << "ÇëÊäÈëĞòÁĞ£ºn c1 e1 c2 e2 ... (n ÎªÏîÊı)\n";
-    int n;
-    while (!(in >> n) || n < 0) {
-        cout << "ÊäÈëÎŞĞ§£¬ÇëÊäÈë·Ç¸ºÕûÊı n: ";
-        in.clear();
-        in.ignore(numeric_limits<streamsize>::max(), '\n');
-    }
-    for (int i = 0; i < n; ++i) {
-        long long c; int e;
-        while (!(in >> c >> e)) {
-            cout << "¶ÁÈ¡ÏîÊ§°Ü£¬ÇëÖØĞÂÊäÈë¸ÃÏîµÄ ÏµÊı Ö¸Êı: ";
-            in.clear();
-            in.ignore(numeric_limits<streamsize>::max(), '\n');
+    cout << "è¯·ä¾æ¬¡è¾“å…¥ç³»æ•°ï¼ˆä» x^" << n << " åˆ° x^0ï¼‰ï¼Œæ¯æ­¥è¾“å…¥åå›è½¦ã€‚\n";
+    vector<long long> tmpCoeffs(n + 1, 0);
+    for (int e = n; e >= 0; --e) {
+        cout << "ç³»æ•° a_" << e << " (x^" << e << ")ï¼Œè¾“å…¥ q æ’¤å›å¹¶å–æ¶ˆæœ¬æ¬¡è¾“å…¥: ";
+        // æˆ‘ä»¬åªè¯»å–æ•´æ•°è¾“å…¥ï¼›æç¤ºç”¨æˆ·å…ˆç¡®è®¤å¼€å§‹ï¼Œè‹¥è¦æ’¤å›è¾“å…¥åˆ™è¾“å…¥ 'q'ï¼ˆéœ€è¦å¤„ç†æ··åˆè¾“å…¥ï¼‰
+        // ä¸ºç®€å•å¹¶ç¨³å¦¥ï¼šå…ˆè¯»å– stringï¼Œå†å°è¯•è½¬æ¢ä¸ºæ•´æ•°æˆ–åˆ¤æ–­æ˜¯å¦ä¸º 'q'
+        string token;
+        while (true) {
+            if (!(in >> token)) {
+                // è¯»å…¥å¤±è´¥ï¼ˆä¾‹å¦‚ EOFï¼‰ï¼Œå–æ¶ˆ
+                cout << "è¯»å–å¤±è´¥ï¼Œå–æ¶ˆè¾“å…¥ã€‚\n";
+                terms.clear();
+                return;
+            }
+            if (token == "q" || token == "Q") {
+                cout << "æ’¤å›ï¼šå·²å–æ¶ˆæœ¬æ¬¡å¤šé¡¹å¼è¾“å…¥ã€‚\n";
+                terms.clear();
+                return;
+            }
+            // å°è¯•å°† token è½¬ä¸º long long
+            try {
+                size_t idx = 0;
+                long long val = stoll(token, &idx);
+                if (idx != token.size()) {
+                    throw invalid_argument("éçº¯æ•´æ•°");
+                }
+                tmpCoeffs[e] = val;
+                break;
+            }
+            catch (...) {
+                cout << "è¾“å…¥æ— æ•ˆï¼Œè¯·è¾“å…¥æ•´æ•°ç³»æ•°ï¼Œæˆ–è¾“å…¥ q å–æ¶ˆ: ";
+            }
         }
+    }
+
+    // å°†ä¸´æ—¶ç³»æ•°å†™å…¥ termsï¼ˆåªæœ‰éé›¶é¡¹ï¼‰
+    for (int e = n; e >= 0; --e) {
+        long long c = tmpCoeffs[e];
         if (c != 0) terms.emplace_back(c, e);
     }
     simplify();
-    cout << "ĞòÁĞÊäÈëÍê³É¡£\n";
+
+    // æ˜¾ç¤ºå¹¶è¦æ±‚ç¡®è®¤ï¼ˆæ’¤å›é€‰é¡¹ï¼‰
+    cout << "ä½ åˆšåˆšè¾“å…¥çš„å¤šé¡¹å¼æ˜¯ï¼š " << toPrettyString() << "\n";
+    cout << "ç¡®è®¤ä¿å­˜ï¼Ÿ(1=ä¿å­˜, 0=æ’¤å›å¹¶å–æ¶ˆ): ";
+    int conf;
+    while (!(in >> conf) || (conf != 0 && conf != 1)) {
+        cout << "è¯·è¾“å…¥ 1 ä¿å­˜ï¼Œæˆ– 0 æ’¤å›å¹¶å–æ¶ˆ: ";
+        in.clear();
+        in.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    if (conf == 0) {
+        terms.clear();
+        cout << "å·²æ’¤å›å¹¶å–æ¶ˆä¿å­˜ã€‚\n";
+    }
+    else {
+        cout << "å·²ä¿å­˜å¤šé¡¹å¼ã€‚\n";
+    }
 }
 
 void Polynomial::printSequence(ostream& out) const {
@@ -114,48 +144,54 @@ void Polynomial::printSequence(ostream& out) const {
     out << "\n";
 }
 
+// ASCII å…¼å®¹çš„æŒ‡æ•°æ˜¾ç¤ºï¼ˆä¸ä¼šä½¿ç”¨ Unicode ä¸Šæ ‡ï¼‰
+// æŠŠä¸Šæ ‡è¾“å‡ºä¸º ^n å½¢å¼ï¼ˆä¾‹å¦‚ x^2ï¼‰ï¼Œx^1 åˆ™è¾“å‡º x
+static std::string expToAscii(int e) {
+    if (e <= 0) return "";            // e == 0: æ²¡æœ‰ x éƒ¨åˆ†
+    if (e == 1) return "x";           // x^1 -> x
+    return std::string("x^") + std::to_string(e);
+}
+
 std::string Polynomial::toPrettyString() const {
     if (terms.empty()) return "0";
-    ostringstream oss;
+    std::ostringstream oss;
     bool first = true;
     for (auto& t : terms) {
         long long c = t.coeff;
         int e = t.exp;
         if (first) {
-            // Ê×Ïî£ºÖ±½ÓÊä³öÕı¸º
+            // é¦–é¡¹ç›´æ¥å†™ç¬¦å·
             if (c < 0) oss << "-";
-            long long ac = llabs(c);
+            long long ac = std::llabs(c);
             if (e == 0) {
                 oss << ac;
             }
             else {
                 if (ac != 1) oss << ac;
-                oss << "x";
-                if (e != 1) oss << "^" << e;
+                oss << expToAscii(e);
             }
             first = false;
         }
         else {
-            // ºóĞøÏî£º´ø·ûºÅ¿Õ¸ñ
             if (c < 0) oss << " - ";
             else oss << " + ";
-            long long ac = llabs(c);
+            long long ac = std::llabs(c);
             if (e == 0) {
                 oss << ac;
             }
             else {
                 if (ac != 1) oss << ac;
-                oss << "x";
-                if (e != 1) oss << "^" << e;
+                oss << expToAscii(e);
             }
         }
     }
     return oss.str();
 }
 
-void Polynomial::printPretty(ostream& out) const {
+void Polynomial::printPretty(std::ostream& out) const {
     out << toPrettyString() << "\n";
 }
+
 
 Polynomial Polynomial::add(const Polynomial& other) const {
     Polynomial res;
@@ -185,16 +221,16 @@ Polynomial Polynomial::multiply(const Polynomial& other) const {
 }
 
 pair<Polynomial, Polynomial> Polynomial::divide(const Polynomial& divisor) const {
-    if (divisor.isZero()) throw runtime_error("³ıÒÔÁã¶àÏîÊ½´íÎó¡£");
+    if (divisor.isZero()) throw runtime_error("é™¤ä»¥é›¶å¤šé¡¹å¼é”™è¯¯ã€‚");
     Polynomial dividend = *this;
-    Polynomial q; // ÉÌ
-    // ³¤³ı·¨£¨ÕûÏµÊı£©£ºÖ»ÓĞµ±Ê×ÏîÏµÊıÄÜÕû³ıÊ±²Å½øĞĞ¸ÃÏîµÄÏûÈ¥£»·ñÔòÍ£Ö¹£¬Ê£Óà×÷ÎªÓàÊı
+    Polynomial q; // å•†
+    // é•¿é™¤æ³•ï¼ˆæ•´ç³»æ•°ï¼‰ï¼šåªæœ‰å½“é¦–é¡¹ç³»æ•°èƒ½æ•´é™¤æ—¶æ‰è¿›è¡Œè¯¥é¡¹çš„æ¶ˆå»ï¼›å¦åˆ™åœæ­¢ï¼Œå‰©ä½™ä½œä¸ºä½™æ•°
     while (!dividend.isZero() && dividend.maxExp() >= divisor.maxExp()) {
         long long a = dividend.terms.front().coeff;
         long long b = divisor.terms.front().coeff;
         int expDiff = dividend.terms.front().exp - divisor.terms.front().exp;
-        if (b == 0) throw runtime_error("³ıÊ½Ê×ÏîÏµÊıÎª0£¨·Ç·¨£©");
-        // Ö»ÔÚÕû³ıÊ±¼ÌĞø
+        if (b == 0) throw runtime_error("é™¤å¼é¦–é¡¹ç³»æ•°ä¸º0ï¼ˆéæ³•ï¼‰");
+        // åªåœ¨æ•´é™¤æ—¶ç»§ç»­
         if (a % b != 0) break;
         long long qc = a / b;
         Polynomial t;
@@ -205,7 +241,7 @@ pair<Polynomial, Polynomial> Polynomial::divide(const Polynomial& divisor) const
         dividend = dividend.sub(subtrahend);
         dividend.simplify();
     }
-    // Ê£ÏÂµÄ dividend ÎªÓàÊı
+    // å‰©ä¸‹çš„ dividend ä¸ºä½™æ•°
     return { q, dividend };
 }
 
