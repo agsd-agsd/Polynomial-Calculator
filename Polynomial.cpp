@@ -1,255 +1,160 @@
 ﻿#include "Polynomial.hpp"
-#include <sstream>
-#include <stdexcept>
 #include <cmath>
-#include <limits>
+#include <iomanip>
+#include <sstream>
+#include <algorithm>
 
 using namespace std;
 
-static long long powLL(long long base, int exp) {
-    long long res = 1;
-    long long b = base;
-    int e = exp;
-    while (e > 0) {
-        if (e & 1) res = res * b;
-        b = b * b;
-        e >>= 1;
+static const double EPS = 1e-9;
+
+void Polynomial::normalize() {
+    while (!coeffs.empty() && fabs(coeffs.back()) < EPS) coeffs.pop_back();
+    if (coeffs.empty()) coeffs.push_back(0.0);
+}
+
+string Polynomial::formatNumber(double v) {
+    double iv = round(v);
+    if (fabs(v - iv) < EPS) {
+        ostringstream oss;
+        oss << (long long)iv;
+        return oss.str();
     }
+    else {
+        ostringstream oss;
+        oss << fixed << setprecision(6) << v;
+        string s = oss.str();
+        while (!s.empty() && s.back() == '0') s.pop_back();
+        if (!s.empty() && s.back() == '.') s.pop_back();
+        return s;
+    }
+}
+
+string Polynomial::termToString(double coeff, int exp) {
+    string cstr = formatNumber(fabs(coeff));
+    ostringstream oss;
+    if (exp == 0) {
+        oss << cstr;
+        return oss.str();
+    }
+    if (fabs(fabs(coeff) - 1.0) < EPS) {
+        oss << "x";
+    }
+    else {
+        oss << cstr << "x";
+    }
+    if (exp != 1) oss << "^" << exp;
+    return oss.str();
+}
+
+Polynomial::Polynomial(const vector<double>& c) : coeffs(c) {
+    normalize();
+}
+
+void Polynomial::setCoeffs(const vector<double>& c) {
+    coeffs = c;
+    normalize();
+}
+
+int Polynomial::degree() const {
+    int last = (int)coeffs.size() - 1;
+    while (last >= 0 && fabs(coeffs[last]) < EPS) --last;
+    if (last < 0) return 0;
+    return last;
+}
+
+double Polynomial::getCoeff(int exp) const {
+    if (exp < 0 || exp >= (int)coeffs.size()) return 0.0;
+    return coeffs[exp];
+}
+
+Polynomial Polynomial::add(const Polynomial& other) const {
+    int n = max(degree(), other.degree());
+    vector<double> res(n + 1, 0.0);
+    for (int i = 0; i <= n; ++i) res[i] = getCoeff(i) + other.getCoeff(i);
+    return Polynomial(res);
+}
+
+Polynomial Polynomial::sub(const Polynomial& other) const {
+    int n = max(degree(), other.degree());
+    vector<double> res(n + 1, 0.0);
+    for (int i = 0; i <= n; ++i) res[i] = getCoeff(i) - other.getCoeff(i);
+    return Polynomial(res);
+}
+
+Polynomial Polynomial::mul(const Polynomial& other) const {
+    int da = degree(), db = other.degree();
+    vector<double> res(da + db + 1, 0.0);
+    for (int i = 0; i <= da; ++i)
+        for (int j = 0; j <= db; ++j)
+            res[i + j] += getCoeff(i) * other.getCoeff(j);
+    return Polynomial(res);
+}
+
+pair<Polynomial, Polynomial> Polynomial::div(const Polynomial& divisor) const {
+    vector<double> A = coeffs;
+    Polynomial D = divisor;
+    D.normalize();
+    if (D.coeffs.empty() || (D.coeffs.size() == 1 && fabs(D.coeffs[0]) < EPS))
+        throw runtime_error("除以零多项式");
+    int da = (int)A.size() - 1;
+    while (da >= 0 && fabs(A[da]) < EPS) --da;
+    int db = D.degree();
+    if (da < db) {
+        return { Polynomial(vector<double>{0.0}), Polynomial(A) };
+    }
+    vector<double> Q(da - db + 1, 0.0);
+    vector<double> R = A;
+    for (int k = da - db; k >= 0; --k) {
+        double coefR = (k + db < (int)R.size()) ? R[k + db] : 0.0;
+        double leadD = D.getCoeff(db);
+        if (fabs(leadD) < EPS) throw runtime_error("除多项式首项为0");
+        double qk = coefR / leadD;
+        Q[k] = qk;
+        for (int j = 0; j <= db; ++j) {
+            int idx = j + k;
+            if (idx >= (int)R.size()) R.resize(idx + 1, 0.0);
+            R[idx] -= qk * D.getCoeff(j);
+        }
+    }
+    Polynomial quotient(Q);
+    Polynomial remainder(R);
+    quotient.normalize();
+    remainder.normalize();
+    return { quotient, remainder };
+}
+
+double Polynomial::evaluate(double x) const {
+    int d = degree();
+    double res = 0.0;
+    for (int i = d; i >= 0; --i) res = res * x + getCoeff(i);
     return res;
 }
 
-void Polynomial::simplify() {
-    if (terms.empty()) return;
-    sort(terms.begin(), terms.end(), [](const Term& a, const Term& b) {
-        return a.exp > b.exp;
-        });
-    vector<Term> merged;
-    merged.reserve(terms.size());
-    for (auto& t : terms) {
-        if (!merged.empty() && merged.back().exp == t.exp) {
-            merged.back().coeff += t.coeff;
-        }
-        else {
-            merged.push_back(t);
-        }
-    }
-    terms.clear();
-    for (auto& t : merged) {
-        if (t.coeff != 0) terms.push_back(t);
-    }
-}
-
-bool Polynomial::isZero() const {
-    return terms.empty();
-}
-
-int Polynomial::maxExp() const {
-    if (terms.empty()) return -1000000;
-    return terms.front().exp;
-}
-
-Polynomial::Polynomial(const vector<long long>& seq) {
-    if (seq.empty()) return;
-    int n = static_cast<int>(seq[0]);
-    for (int i = 0; i < n; ++i) {
-        long long c = seq[1 + 2 * i];
-        int e = static_cast<int>(seq[1 + 2 * i + 1]);
-        terms.emplace_back(c, e);
-    }
-    simplify();
-}
-
-void Polynomial::inputByDegree(istream& in, int presetDegree) {
-    terms.clear();
-    int n = presetDegree;
-    if (n < 0) {
-        // 如果没有预设，则自己询问（兼容旧逻辑）
-        cout << "请输入多项式的最高次数 n（非负整数，例如 n=3 表示最高项 x^3）。输入 -1 可取消： ";
-        while (!(in >> n) || n < -1) {
-            cout << "输入无效，请输入非负整数 n（或 -1 取消）： ";
-            in.clear();
-            in.ignore(numeric_limits<streamsize>::max(), '\n');
-        }
-        if (n == -1) {
-            cout << "已取消输入。\n";
-            return;
-        }
-    }
-
-    cout << "请依次输入系数（从 x^" << n << " 到 x^0），每步输入后回车。\n";
-    vector<long long> tmpCoeffs(n + 1, 0);
-    for (int e = n; e >= 0; --e) {
-        cout << "系数 a_" << e << " (x^" << e << ")，输入 q 撤回并取消本次输入: ";
-        // 我们只读取整数输入；提示用户先确认开始，若要撤回输入则输入 'q'（需要处理混合输入）
-        // 为简单并稳妥：先读取 string，再尝试转换为整数或判断是否为 'q'
-        string token;
-        while (true) {
-            if (!(in >> token)) {
-                // 读入失败（例如 EOF），取消
-                cout << "读取失败，取消输入。\n";
-                terms.clear();
-                return;
-            }
-            if (token == "q" || token == "Q") {
-                cout << "撤回：已取消本次多项式输入。\n";
-                terms.clear();
-                return;
-            }
-            // 尝试将 token 转为 long long
-            try {
-                size_t idx = 0;
-                long long val = stoll(token, &idx);
-                if (idx != token.size()) {
-                    throw invalid_argument("非纯整数");
-                }
-                tmpCoeffs[e] = val;
-                break;
-            }
-            catch (...) {
-                cout << "输入无效，请输入整数系数，或输入 q 取消: ";
-            }
-        }
-    }
-
-    // 将临时系数写入 terms（只有非零项）
-    for (int e = n; e >= 0; --e) {
-        long long c = tmpCoeffs[e];
-        if (c != 0) terms.emplace_back(c, e);
-    }
-    simplify();
-
-    // 显示并要求确认（撤回选项）
-    cout << "你刚刚输入的多项式是： " << toPrettyString() << "\n";
-    cout << "确认保存？(1=保存, 0=撤回并取消): ";
-    int conf;
-    while (!(in >> conf) || (conf != 0 && conf != 1)) {
-        cout << "请输入 1 保存，或 0 撤回并取消: ";
-        in.clear();
-        in.ignore(numeric_limits<streamsize>::max(), '\n');
-    }
-    if (conf == 0) {
-        terms.clear();
-        cout << "已撤回并取消保存。\n";
-    }
-    else {
-        cout << "已保存多项式。\n";
-    }
-}
-
-void Polynomial::printSequence(ostream& out) const {
-    out << terms.size();
-    for (auto& t : terms) {
-        out << " " << t.coeff << " " << t.exp;
-    }
-    out << "\n";
-}
-
-// ASCII 兼容的指数显示（不会使用 Unicode 上标）
-// 把上标输出为 ^n 形式（例如 x^2），x^1 则输出 x
-static std::string expToAscii(int e) {
-    if (e <= 0) return "";            // e == 0: 没有 x 部分
-    if (e == 1) return "x";           // x^1 -> x
-    return std::string("x^") + std::to_string(e);
-}
-
-std::string Polynomial::toPrettyString() const {
-    if (terms.empty()) return "0";
-    std::ostringstream oss;
+string Polynomial::toString() const {
+    int last = (int)coeffs.size() - 1;
+    while (last >= 0 && fabs(coeffs[last]) < EPS) --last;
+    if (last < 0) return "0";
+    ostringstream oss;
     bool first = true;
-    for (auto& t : terms) {
-        long long c = t.coeff;
-        int e = t.exp;
+    for (int i = last; i >= 0; --i) {
+        double c = getCoeff(i);
+        if (fabs(c) < EPS) continue;
         if (first) {
-            // 首项直接写符号
             if (c < 0) oss << "-";
-            long long ac = std::llabs(c);
-            if (e == 0) {
-                oss << ac;
-            }
-            else {
-                if (ac != 1) oss << ac;
-                oss << expToAscii(e);
-            }
+            oss << termToString(c, i);
             first = false;
         }
         else {
             if (c < 0) oss << " - ";
             else oss << " + ";
-            long long ac = std::llabs(c);
-            if (e == 0) {
-                oss << ac;
-            }
-            else {
-                if (ac != 1) oss << ac;
-                oss << expToAscii(e);
-            }
+            oss << termToString(c, i);
         }
     }
+    if (first) return "0";
     return oss.str();
 }
 
-void Polynomial::printPretty(std::ostream& out) const {
-    out << toPrettyString() << "\n";
-}
-
-
-Polynomial Polynomial::add(const Polynomial& other) const {
-    Polynomial res;
-    res.terms = terms;
-    for (auto& t : other.terms) res.terms.emplace_back(t.coeff, t.exp);
-    res.simplify();
-    return res;
-}
-
-Polynomial Polynomial::sub(const Polynomial& other) const {
-    Polynomial res;
-    res.terms = terms;
-    for (auto& t : other.terms) res.terms.emplace_back(-t.coeff, t.exp);
-    res.simplify();
-    return res;
-}
-
-Polynomial Polynomial::multiply(const Polynomial& other) const {
-    Polynomial res;
-    for (auto& a : terms) {
-        for (auto& b : other.terms) {
-            res.terms.emplace_back(a.coeff * b.coeff, a.exp + b.exp);
-        }
-    }
-    res.simplify();
-    return res;
-}
-
-pair<Polynomial, Polynomial> Polynomial::divide(const Polynomial& divisor) const {
-    if (divisor.isZero()) throw runtime_error("除以零多项式错误。");
-    Polynomial dividend = *this;
-    Polynomial q; // 商
-    // 长除法（整系数）：只有当首项系数能整除时才进行该项的消去；否则停止，剩余作为余数
-    while (!dividend.isZero() && dividend.maxExp() >= divisor.maxExp()) {
-        long long a = dividend.terms.front().coeff;
-        long long b = divisor.terms.front().coeff;
-        int expDiff = dividend.terms.front().exp - divisor.terms.front().exp;
-        if (b == 0) throw runtime_error("除式首项系数为0（非法）");
-        // 只在整除时继续
-        if (a % b != 0) break;
-        long long qc = a / b;
-        Polynomial t;
-        t.terms.emplace_back(qc, expDiff);
-        t.simplify();
-        q = q.add(t);
-        Polynomial subtrahend = t.multiply(divisor);
-        dividend = dividend.sub(subtrahend);
-        dividend.simplify();
-    }
-    // 剩下的 dividend 为余数
-    return { q, dividend };
-}
-
-long long Polynomial::evaluate(long long x) const {
-    long long res = 0;
-    for (auto& t : terms) {
-        long long termVal = powLL(x, t.exp);
-        res += t.coeff * termVal;
-    }
-    return res;
+void Polynomial::print(ostream& out) const {
+    out << toString();
 }

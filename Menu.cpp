@@ -1,13 +1,9 @@
-﻿// Menu.cpp （按你最新要求改造）
-// - 在父菜单里提示输入方式（唯一：按次数输入）并读取最高次数 n（可取消 -1）
-// - 输入 a 后询问是否继续输入 b（1: 输入 b, 0: 返回主菜单）
-// - 如果替换已有多项式，先提示当前多项式并要求确认
-// - 每一步都有撤回/确认机制
-
-#include "Menu.hpp"
+﻿#include "Menu.hpp"
 #include "Polynomial.hpp"
 #include <iostream>
+#include <string>
 #include <limits>
+#include <vector>
 
 using namespace std;
 
@@ -16,298 +12,286 @@ static void clearStdin() {
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
 }
 
+static bool readDegree(int& outDegree) {
+    while (true) {
+        string tok;
+        if (!(cin >> tok)) return false;
+        try {
+            int v = stoi(tok);
+            outDegree = v;
+            return true;
+        }
+        catch (...) {
+            cout << "输入无效，请输入整数（或 -1 取消）：";
+        }
+    }
+}
+
+static int readCoeffOrCancel(double& value) {
+    string tok;
+    if (!(cin >> tok)) return -1;
+    if (tok == "q" || tok == "Q") return 1;
+    try {
+        value = stod(tok);
+        return 0;
+    }
+    catch (...) {
+        return -1;
+    }
+}
+
+static vector<double> inputPolynomialCoeffsInteractive(int degree) {
+    vector<double> tmp(degree + 1, 0.0);
+    cout << "请依次输入各项系数（从 x^" << degree << " 到 x^0），输入 q 撤回并取消本次多项式输入。\n";
+    for (int e = degree; e >= 0; --e) {
+        while (true) {
+            cout << "系数 x^" << e << " : ";
+            double val;
+            int rc = readCoeffOrCancel(val);
+            if (rc == -1) {
+                cout << "输入无效，请重新输入或输入 q 取消。\n";
+                clearStdin();
+                continue;
+            }
+            else if (rc == 1) {
+                cout << "已选择取消当前多项式输入。\n";
+                return vector<double>();
+            }
+            else {
+                tmp[e] = val;
+                break;
+            }
+        }
+    }
+    return tmp;
+}
+
+static int offerCancelOptionsForAorB(const string& name) {
+    while (true) {
+        cout << "你选择了撤回/取消。\n";
+        cout << "请选择：1. 重新输入 " << name << "  2. 输入多项式 " << (name == "a" ? "b" : "a") << "  3. 返回主菜单\n";
+        cout << "请输入选项 (1/2/3): ";
+        string tok;
+        if (!(cin >> tok)) return 3;
+        if (tok == "1") return 1;
+        if (tok == "2") return 2;
+        if (tok == "3") return 3;
+        cout << "无效选择，请重新输入。\n";
+    }
+}
+
+// 改造：传入 hasTarget 引用，以便在开始前询问是否替换已有多项式
+static bool inputPolynomialFlow(Polynomial& poly, const string& name, bool& hasTarget) {
+    while (true) {
+        // 如果已有保存项，先询问是否替换
+        if (hasTarget) {
+            cout << "检测到当前已存在多项式 " << name << "(x) = ";
+            poly.print();
+            cout << "\n是否替换该多项式？(1=替换, 0=取消本次输入并返回): ";
+            string rep;
+            if (!(cin >> rep)) { clearStdin(); return false; }
+            if (rep == "0") {
+                cout << "取消替换，返回上一级。\n";
+                return false;
+            }
+            else if (rep != "1") {
+                cout << "输入无效，默认取消。\n";
+                return false;
+            }
+            // 若选择替换，继续下面流程
+        }
+
+        cout << "\n---- 输入多项式 " << name << " ----\n";
+        cout << "请输入最高次数 n（非负整数），输入 -1 取消并返回上一级： ";
+        int n;
+        if (!readDegree(n)) { clearStdin(); return false; }
+        if (n == -1) { cout << "已取消，返回上一级。\n"; return false; }
+        if (n < 0) { cout << "次数不能为负，请重新输入。\n"; continue; }
+
+        vector<double> coeffs = inputPolynomialCoeffsInteractive(n);
+        if (coeffs.empty()) {
+            int opt = offerCancelOptionsForAorB(name);
+            if (opt == 1) {
+                // 重新输入当前（循环继续）
+                continue;
+            }
+            else if (opt == 2) {
+                // caller should switch to input other poly
+                return false;
+            }
+            else {
+                return false;
+            }
+        }
+
+        Polynomial tmp(coeffs);
+        cout << "你刚输入的 " << name << "(x) = ";
+        tmp.print();
+        cout << "\n确认保存？(1=保存, 0=撤回并选择其他操作): ";
+        string tok;
+        if (!(cin >> tok)) { clearStdin(); return false; }
+        if (tok == "1") {
+            poly.setCoeffs(coeffs);
+            hasTarget = true;
+            cout << "已保存多项式 " << name << ".\n";
+            return true;
+        }
+        else {
+            int opt = offerCancelOptionsForAorB(name);
+            if (opt == 1) {
+                continue;
+            }
+            else if (opt == 2) {
+                return false;
+            }
+            else {
+                return false;
+            }
+        }
+    }
+}
+
 void Menu::show() {
     Polynomial A, B;
     bool hasA = false, hasB = false;
 
     while (true) {
-        // 当尚未同时输入 a 和 b 时，主菜单只显示输入与退出
-        if (!hasA || !hasB) {
-            cout << "\n===== 多项式计算器（第一步：请输入多项式） =====\n";
-            cout << "说明：当前输入方式为【按次数输入】（这是唯一的输入方式）。\n";
-            cout << "操作：选择“输入多项式”后，先输入最高次数 n（非负整数），然后按从 x^n 到 x^0 依次输入系数。\n";
-            cout << "（注：输入系数时输入 q 可撤回并取消本次多项式输入。）\n";
-            cout << "1. 输入多项式\n";
-            cout << "0. 退出\n";
-            cout << "请选择: ";
-
-            int choice;
-            if (!(cin >> choice)) { clearStdin(); cout << "输入无效，请输入数字选项。\n"; continue; }
-
-            if (choice == 0) break;
-            if (choice != 1) { cout << "无效选择。\n"; continue; }
-
-            // 父菜单先读最高次数（或允许取消）
-            cout << "请输入多项式的最高次数 n（非负整数）。如需取消本次输入，请输入 -1 然后回车: ";
-            int presetN;
-            while (!(cin >> presetN) || presetN < -1) {
-                cout << "输入无效，请输入非负整数 n 或 -1 取消： ";
-                clearStdin();
-            }
-            if (presetN == -1) {
-                cout << "已取消，返回主菜单。\n";
-                continue;
-            }
-
-            // 选择输入哪一个（a 或 b）
-            while (true) {
-                cout << "\n请选择要输入的多项式：\n";
-                cout << "1. 输入多项式 a\n";
-                cout << "2. 输入多项式 b\n";
-                cout << "0. 取消并返回主菜单\n";
-                cout << "请选择: ";
-                int which;
-                if (!(cin >> which)) { clearStdin(); cout << "输入无效。\n"; continue; }
-                if (which == 0) break;
-                if (which != 1 && which != 2) { cout << "无效选择。\n"; continue; }
-
-                Polynomial* target = (which == 1 ? &A : &B);
-                bool* hasTarget = (which == 1 ? &hasA : &hasB);
-
-                // 如果目标已有多项式，先询问是否替换
-                if (*hasTarget) {
-                    cout << "\n检测到你将覆盖已存在的多项式 ";
-                    cout << (which == 1 ? "a = " : "b = ");
-                    target->printPretty();
-                    cout << "是否替换该多项式？(1=替换, 0=取消本次输入并返回): ";
-                    int rep;
-                    while (!(cin >> rep) || (rep != 0 && rep != 1)) {
-                        cout << "请输入 1 (替换) 或 0 (取消)： ";
-                        clearStdin();
-                    }
-                    if (rep == 0) {
-                        cout << "取消替换，返回到选择 a/b。\n";
-                        continue;
-                    }
-                    else {
-                        cout << "将替换原多项式。\n";
-                    }
-                }
-
-                // 调用按次数输入（使用父菜单读好的 presetN）
-                target->inputByDegree(cin, presetN);
-                if (target->empty()) {
-                    // 用户在输入过程中撤回或取消（inputByDegree 会处理并清空 terms）
-                    cout << "本次输入未保存。\n";
-                }
-                else {
-                    *hasTarget = true;
-                }
-
-                // 如果刚输入的是 a，询问是否继续输入 b（1: 输入 b，0: 返回主菜单）
-                if (which == 1) {
-                    cout << "\n是否继续输入多项式 b？(1: 输入 b, 0: 返回主菜单): ";
-                    int cont;
-                    while (!(cin >> cont) || (cont != 0 && cont != 1)) {
-                        cout << "请输入 1 继续输入 b，或 0 返回主菜单： ";
-                        clearStdin();
-                    }
-                    if (cont == 1) {
-                        // 直接跳到输入 b（使用相同 presetN? 让用户选择是否使用相同次数）
-                        cout << "是否使用相同的最高次数 n = " << presetN << " 来输入 b？(1: 使用, 0: 重新输入次数): ";
-                        int useSame;
-                        while (!(cin >> useSame) || (useSame != 0 && useSame != 1)) {
-                            cout << "请输入 1 使用相同次数，或 0 重新输入次数： ";
-                            clearStdin();
-                        }
-                        if (useSame == 1) {
-                            // 输入 b with presetN
-                            // 如果已有 b，先询问是否替换
-                            if (hasB) {
-                                cout << "\n检测到你将覆盖已存在的多项式 b = ";
-                                B.printPretty();
-                                cout << "是否替换该多项式？(1=替换, 0=取消并返回主菜单): ";
-                                int repb;
-                                while (!(cin >> repb) || (repb != 0 && repb != 1)) {
-                                    cout << "请输入 1 或 0： ";
-                                    clearStdin();
-                                }
-                                if (repb == 0) {
-                                    cout << "取消替换，返回主菜单。\n";
-                                    break;
-                                }
-                            }
-                            B.inputByDegree(cin, presetN);
-                            if (!B.empty()) hasB = true;
-                        }
-                        else {
-                            // 重新要求输入次数（若用户希望不同次数）
-                            cout << "请输入多项式 b 的最高次数 n（非负整数）。如需取消请输入 -1: ";
-                            int newN;
-                            while (!(cin >> newN) || newN < -1) {
-                                cout << "输入无效，请输入非负整数 n 或 -1 取消： ";
-                                clearStdin();
-                            }
-                            if (newN == -1) {
-                                cout << "已取消，返回主菜单。\n";
-                                break;
-                            }
-                            // 如果已有 b，询问是否替换
-                            if (hasB) {
-                                cout << "\n检测到你将覆盖已存在的多项式 b = ";
-                                B.printPretty();
-                                cout << "是否替换该多项式？(1=替换, 0=取消并返回主菜单): ";
-                                int repb;
-                                while (!(cin >> repb) || (repb != 0 && repb != 1)) {
-                                    cout << "请输入 1 或 0： ";
-                                    clearStdin();
-                                }
-                                if (repb == 0) {
-                                    cout << "取消替换，返回主菜单。\n";
-                                    break;
-                                }
-                            }
-                            B.inputByDegree(cin, newN);
-                            if (!B.empty()) hasB = true;
-                        }
-                        // 输入 b 结束后，返回主菜单
-                        break;
-                    }
-                    else {
-                        // cont == 0: 直接返回主菜单
-                        break;
-                    }
-                }
-                else {
-                    // 如果这次输入的是 b（which==2），输入完成后直接返回主菜单
-                    break;
-                }
-            } // end choose a/b loop
-
-            continue; // 回到主 while
-        } // end not both A&B
-
-        // 当 hasA && hasB 为 true，显示完整主菜单
         cout << "\n===== 多项式计算器 主菜单 =====\n";
-        cout << "1. 重新输入 a 或 b\n";
-        cout << "2. 输出多项式（序列 / 手写数学格式）\n";
-        cout << "3. a + b\n";
-        cout << "4. a - b\n";
-        cout << "5. a * b\n";
-        cout << "6. a / b（整系数长除法 -> 返回 商 与 余数）\n";
-        cout << "7. 在 x 处求值\n";
+        cout << "1. 输入多项式\n";
+        cout << "2. 运算（加/减/乘/除）\n";
+        cout << "3. 在 x 处求值\n";
         cout << "0. 退出\n";
         cout << "请选择: ";
+        string choice;
+        if (!(cin >> choice)) { clearStdin(); break; }
 
-        int choice2;
-        if (!(cin >> choice2)) { clearStdin(); cout << "输入无效，请输入数字选项。\n"; continue; }
+        if (choice == "0") break;
 
-        if (choice2 == 0) break;
-
-        switch (choice2) {
-        case 1: {
-            // 重新输入 a 或 b（与之前相似，但简洁）
+        if (choice == "1") {
             while (true) {
-                cout << "\n--- 重新输入子菜单 ---\n";
-                cout << "1. 重新输入多项式 a\n";
-                cout << "2. 重新输入多项式 b\n";
-                cout << "0. 返回上一级\n";
+                cout << "\n--- 输入多项式子菜单 ---\n";
+                cout << "1. 输入多项式 a\n";
+                cout << "2. 输入多项式 b\n";
+                cout << "0. 返回主菜单\n";
                 cout << "请选择: ";
-                int r;
-                if (!(cin >> r)) { clearStdin(); cout << "输入无效。\n"; continue; }
-                if (r == 0) break;
-                if (r != 1 && r != 2) { cout << "无效选择。\n"; continue; }
-                Polynomial* p = (r == 1 ? &A : &B);
-                bool* hasP = (r == 1 ? &hasA : &hasB);
-
-                cout << "请输入新的最高次数 n（非负整数），或 -1 取消: ";
-                int newN;
-                while (!(cin >> newN) || newN < -1) {
-                    cout << "输入无效，请输入非负整数 n 或 -1 取消： ";
-                    clearStdin();
+                string sub;
+                if (!(cin >> sub)) { clearStdin(); break; }
+                if (sub == "0") break;
+                if (sub == "1") {
+                    bool res = inputPolynomialFlow(A, "a", hasA);
+                    // res true 表示已成功保存 a； false 表示用户取消或切换
+                    // 如果取消但用户想输入 b，则 loop 回到子菜单继续选择即可
                 }
-                if (newN == -1) continue;
-
-                // 替换确认
-                if (*hasP) {
-                    cout << "检测到当前 " << (r == 1 ? "a = " : "b = ");
-                    p->printPretty();
-                    cout << "是否替换？(1=替换, 0=取消): ";
-                    int rep;
-                    while (!(cin >> rep) || (rep != 0 && rep != 1)) {
-                        cout << "请输入 1 或 0： ";
-                        clearStdin();
-                    }
-                    if (rep == 0) { cout << "取消替换。\n"; continue; }
-                }
-                p->inputByDegree(cin, newN);
-                if (!p->empty()) *hasP = true;
-                break;
-            }
-            break;
-        }
-        case 2: {
-            // 输出子菜单
-            while (true) {
-                cout << "\n--- 输出子菜单 ---\n";
-                cout << "1. 机器序列格式输出（n c1 e1 ...）\n";
-                cout << "2. 手写数学格式输出（例如 3x² - x + 2）\n";
-                cout << "0. 返回上一级\n";
-                cout << "请选择: ";
-                int oc;
-                if (!(cin >> oc)) { clearStdin(); cout << "输入无效。\n"; continue; }
-                if (oc == 0) break;
-                cout << "你要输出哪一个？ 1 -> a, 2 -> b, 3 -> 两个都输出, 0 -> 返回: ";
-                int which;
-                if (!(cin >> which)) { clearStdin(); cout << "输入无效。\n"; continue; }
-                if (which == 0) continue;
-                if ((which == 1 || which == 3) && !hasA) { cout << "尚未输入多项式 a。\n"; continue; }
-                if ((which == 2 || which == 3) && !hasB) { cout << "尚未输入多项式 b。\n"; continue; }
-                if (oc == 1) {
-                    if (which == 1 || which == 3) A.printSequence();
-                    if (which == 2 || which == 3) B.printSequence();
+                else if (sub == "2") {
+                    bool res = inputPolynomialFlow(B, "b", hasB);
                 }
                 else {
-                    if (which == 1 || which == 3) A.printPretty();
-                    if (which == 2 || which == 3) B.printPretty();
+                    cout << "无效选择，请重试。\n";
+                }
+                cout << "是否继续输入多项式？(1: 继续输入 a/b, 0: 返回主菜单): ";
+                string cont;
+                if (!(cin >> cont)) { clearStdin(); break; }
+                if (cont == "0") break;
+            }
+        }
+        else if (choice == "2") {
+            if (!hasA || !hasB) {
+                cout << "请先输入多项式 a 和 b（选择 1 -> 输入多项式）。\n";
+                continue;
+            }
+            while (true) {
+                cout << "\n--- 运算子菜单 ---\n";
+                cout << "1. a + b\n";
+                cout << "2. a - b\n";
+                cout << "3. a * b\n";
+                cout << "4. a / b （长除法）\n";
+                cout << "5. 显示 a 和 b\n";
+                cout << "0. 返回主菜单\n";
+                cout << "请选择: ";
+                string op;
+                if (!(cin >> op)) { clearStdin(); break; }
+                if (op == "0") break;
+                if (op == "1") {
+                    Polynomial res = A.add(B);
+                    cout << "a + b = " << res.toString() << "\n";
+                }
+                else if (op == "2") {
+                    Polynomial res = A.sub(B);
+                    cout << "a - b = " << res.toString() << "\n";
+                }
+                else if (op == "3") {
+                    Polynomial res = A.mul(B);
+                    cout << "a * b = " << res.toString() << "\n";
+                }
+                else if (op == "4") {
+                    try {
+                        auto pr = A.div(B);
+                        cout << "商 = " << pr.first.toString() << "\n";
+                        cout << "余数 = " << pr.second.toString() << "\n";
+                    }
+                    catch (exception& e) {
+                        cout << "错误: " << e.what() << "\n";
+                    }
+                }
+                else if (op == "5") {
+                    cout << "a(x) = "; A.print(); cout << "\n";
+                    cout << "b(x) = "; B.print(); cout << "\n";
+                }
+                else {
+                    cout << "无效选项。\n";
                 }
             }
-            break;
         }
-        case 3: {
-            Polynomial res = A.add(B);
-            cout << "a + b = "; res.printPretty();
-            break;
-        }
-        case 4: {
-            Polynomial res = A.sub(B);
-            cout << "a - b = "; res.printPretty();
-            break;
-        }
-        case 5: {
-            Polynomial res = A.multiply(B);
-            cout << "a * b = "; res.printPretty();
-            break;
-        }
-        case 6: {
-            try {
-                auto pr = A.divide(B); // pair<商, 余数>
-                cout << "商 = "; pr.first.printPretty();
-                cout << "余数 = "; pr.second.printPretty();
-                cout << "(注：当前为整系数长除法；若某步无法整除，除法将在该步停止并返回当前余数。)\n";
+        else if (choice == "3") {
+            if (!hasA && !hasB) {
+                cout << "尚未输入任何多项式，请先输入 a 或 b。\n";
+                continue;
             }
-            catch (exception& e) {
-                cout << "错误: " << e.what() << "\n";
+            cout << "\n--- 求值子菜单 ---\n";
+            cout << "1. 计算 a(x)\n";
+            cout << "2. 计算 b(x)\n";
+            cout << "3. 两者都计算\n";
+            cout << "0. 返回主菜单\n";
+            cout << "请选择: ";
+            string s;
+            if (!(cin >> s)) { clearStdin(); continue; }
+            if (s == "0") continue;
+            if ((s == "1" && !hasA) || (s == "2" && !hasB)) {
+                cout << "所选多项式尚未输入。\n";
+                continue;
             }
-            break;
+            cout << "请输入 x 的值（支持小数）：";
+            double x;
+            while (!(cin >> x)) {
+                cout << "输入无效，请输入数字：";
+                clearStdin();
+            }
+            if (s == "1") {
+                double v = A.evaluate(x);
+                cout << "a(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+            }
+            else if (s == "2") {
+                double v = B.evaluate(x);
+                cout << "b(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+            }
+            else if (s == "3") {
+                if (hasA) {
+                    double v = A.evaluate(x);
+                    cout << "a(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+                }
+                if (hasB) {
+                    double v = B.evaluate(x);
+                    cout << "b(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+                }
+            }
+            else {
+                cout << "无效选项。\n";
+            }
         }
-        case 7: {
-            cout << "\n求值菜单：\n";
-            cout << "1. 求 a(x)\n2. 求 b(x)\n3. 都求\n0. 返回\n请选择: ";
-            int vc;
-            if (!(cin >> vc)) { clearStdin(); cout << "输入无效。\n"; continue; }
-            if (vc == 0) break;
-            long long x;
-            cout << "请输入 x 的整数值: ";
-            while (!(cin >> x)) { clearStdin(); cout << "输入无效，请输入整数 x: "; }
-            if ((vc == 1 || vc == 3)) cout << "a(" << x << ") = " << A.evaluate(x) << "\n";
-            if ((vc == 2 || vc == 3)) cout << "b(" << x << ") = " << B.evaluate(x) << "\n";
-            break;
+        else {
+            cout << "无效选项，请重新选择。\n";
         }
-        default:
-            cout << "无效选项，请重试。\n";
-        } // end switch
-    } // end main while
+    }
 
-    cout << "已退出程序。再见~\n";
+    cout << "退出程序。再见！\n";
 }
