@@ -80,7 +80,6 @@ static int offerCancelOptionsForAorB(const string& name) {
     }
 }
 
-// 改造：传入 hasTarget 引用，以便在开始前询问是否替换已有多项式
 static bool inputPolynomialFlow(Polynomial& poly, const string& name, bool& hasTarget) {
     while (true) {
         // 如果已有保存项，先询问是否替换
