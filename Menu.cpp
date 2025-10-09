@@ -4,6 +4,7 @@
 #include <string>
 #include <limits>
 #include <vector>
+#include <cmath>
 
 using namespace std;
 
@@ -12,27 +13,13 @@ static void clearStdin() {
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
 }
 
-static bool readDegree(int& outDegree) {
-    while (true) {
-        string tok;
-        if (!(cin >> tok)) return false;
-        try {
-            int v = stoi(tok);
-            outDegree = v;
-            return true;
-        }
-        catch (...) {
-            cout << "输入无效，请输入整数（或 -1 取消）：";
-        }
-    }
-}
-
-static int readCoeffOrCancel(double& value) {
+// 读取 double 或 q 取消（返回 codes: 0=ok,1=cancel,-1=invalid/EOF）
+static int readDoubleOrCancel(double& outVal) {
     string tok;
     if (!(cin >> tok)) return -1;
     if (tok == "q" || tok == "Q") return 1;
     try {
-        value = stod(tok);
+        outVal = stod(tok);
         return 0;
     }
     catch (...) {
@@ -40,32 +27,22 @@ static int readCoeffOrCancel(double& value) {
     }
 }
 
-static vector<double> inputPolynomialCoeffsInteractive(int degree) {
-    vector<double> tmp(degree + 1, 0.0);
-    cout << "请依次输入各项系数（从 x^" << degree << " 到 x^0），输入 q 撤回并取消本次多项式输入。\n";
-    for (int e = degree; e >= 0; --e) {
-        while (true) {
-            cout << "系数 x^" << e << " : ";
-            double val;
-            int rc = readCoeffOrCancel(val);
-            if (rc == -1) {
-                cout << "输入无效，请重新输入或输入 q 取消。\n";
-                clearStdin();
-                continue;
-            }
-            else if (rc == 1) {
-                cout << "已选择取消当前多项式输入。\n";
-                return vector<double>();
-            }
-            else {
-                tmp[e] = val;
-                break;
-            }
-        }
+// 读取指数（double），支持 q 取消（返回 codes: 0=ok,1=cancel,-1=invalid/EOF）
+static int readExpOrCancel(double& outVal) {
+    string tok;
+    if (!(cin >> tok)) return -1;
+    if (tok == "q" || tok == "Q") return 1;
+    try {
+        outVal = stod(tok);
+        return 0;
     }
-    return tmp;
+    catch (...) {
+        return -1;
+    }
 }
 
+// 当用户在输入过程中取消或确认撤回时提供的三选项
+// 返回值：1=重新输入当前多项式, 2=输入另一个多项式, 3=返回主菜单
 static int offerCancelOptionsForAorB(const string& name) {
     while (true) {
         cout << "你选择了撤回/取消。\n";
@@ -80,58 +57,102 @@ static int offerCancelOptionsForAorB(const string& name) {
     }
 }
 
-static bool inputPolynomialFlow(Polynomial& poly, const string& name, bool& hasTarget) {
+// 在输入前若已有保存的多项式，先询问是否替换；返回 true 表示允许继续输入并覆盖，false 表示取消
+static bool askReplaceIfExists(const string& name, Polynomial& poly, bool has) {
+    if (!has) return true;
+    cout << "检测到当前已存在多项式 " << name << "(x) = ";
+    poly.print();
+    cout << "\n是否替换该多项式？(1=替换, 0=取消本次输入并返回): ";
+    string rep;
+    if (!(cin >> rep)) { clearStdin(); return false; }
+    if (rep == "1") return true;
+    return false;
+}
+
+// 现在只保留按项输入：先输入项数 m，然后逐项输入 (coeff, exp)
+// 支持指数为浮点数（可为负）
+// 返回 true 表示成功保存（caller 更新 hasTarget）
+static bool inputByItemsFlow(Polynomial& poly, const string& name) {
     while (true) {
-        // 如果已有保存项，先询问是否替换
-        if (hasTarget) {
-            cout << "检测到当前已存在多项式 " << name << "(x) = ";
-            poly.print();
-            cout << "\n是否替换该多项式？(1=替换, 0=取消本次输入并返回): ";
-            string rep;
-            if (!(cin >> rep)) { clearStdin(); return false; }
-            if (rep == "0") {
-                cout << "取消替换，返回上一级。\n";
-                return false;
+        cout << "\n---- 按项输入 " << name << " ----\n";
+        cout << "请输入项数 m（正整数），输入 -1 取消并返回上一级： ";
+        int m;
+        string tok;
+        if (!(cin >> tok)) { clearStdin(); return false; }
+        try {
+            m = stoi(tok);
+        }
+        catch (...) {
+            cout << "输入无效，请输入整数。\n";
+            clearStdin();
+            return false;
+        }
+        if (m == -1) { cout << "已取消，返回上一级。\n"; return false; }
+        if (m <= 0) { cout << "项数必须为正整数，请重新输入。\n"; continue; }
+
+        vector<Polynomial::Term> tvec;
+        bool cancelled = false;
+
+        for (int i = 1; i <= m; ++i) {
+            cout << "第 " << i << " 项：\n";
+            double coeff;
+            while (true) {
+                cout << "  系数 (输入 q 取消): ";
+                int rc = readDoubleOrCancel(coeff);
+                if (rc == -1) { cout << "输入无效，请重新输入。\n"; clearStdin(); continue; }
+                if (rc == 1) { cancelled = true; break; }
+                break;
             }
-            else if (rep != "1") {
-                cout << "输入无效，默认取消。\n";
-                return false;
+            if (cancelled) break;
+
+            double exp;
+            while (true) {
+                cout << "  指数（可为小数或负数，例如 -1 或 2.5）（输入 q 取消）： ";
+                int rc = readExpOrCancel(exp);
+                if (rc == -1) { cout << "输入无效，请重新输入指数。\n"; clearStdin(); continue; }
+                if (rc == 1) { cancelled = true; break; }
+                break;
             }
-            // 若选择替换，继续下面流程
+            if (cancelled) break;
+
+            if (fabs(coeff) > Polynomial::EPS) tvec.emplace_back(coeff, exp);
+
+            // 显示当前临时多项式
+            Polynomial tmp(tvec);
+            cout << "当前多项式临时为： " << tmp.toString() << "\n";
+
+            cout << "是否继续添加下一个项？(1=继续, 0=取消并选择操作): ";
+            string cont;
+            if (!(cin >> cont)) { clearStdin(); cancelled = true; break; }
+            if (cont == "1") continue;
+            else {
+                cancelled = true;
+                break;
+            }
         }
 
-        cout << "\n---- 输入多项式 " << name << " ----\n";
-        cout << "请输入最高次数 n（非负整数），输入 -1 取消并返回上一级： ";
-        int n;
-        if (!readDegree(n)) { clearStdin(); return false; }
-        if (n == -1) { cout << "已取消，返回上一级。\n"; return false; }
-        if (n < 0) { cout << "次数不能为负，请重新输入。\n"; continue; }
-
-        vector<double> coeffs = inputPolynomialCoeffsInteractive(n);
-        if (coeffs.empty()) {
+        if (cancelled) {
             int opt = offerCancelOptionsForAorB(name);
             if (opt == 1) {
-                // 重新输入当前（循环继续）
-                continue;
+                continue; // 重新输入当前多项式（从头）
             }
             else if (opt == 2) {
-                // caller should switch to input other poly
-                return false;
+                return false; // caller 处理切换
             }
             else {
                 return false;
             }
         }
 
-        Polynomial tmp(coeffs);
+        // 确认保存
+        Polynomial tmp(tvec);
         cout << "你刚输入的 " << name << "(x) = ";
         tmp.print();
         cout << "\n确认保存？(1=保存, 0=撤回并选择其他操作): ";
-        string tok;
-        if (!(cin >> tok)) { clearStdin(); return false; }
-        if (tok == "1") {
-            poly.setCoeffs(coeffs);
-            hasTarget = true;
+        string tok2;
+        if (!(cin >> tok2)) { clearStdin(); return false; }
+        if (tok2 == "1") {
+            poly.setTerms(tvec);
             cout << "已保存多项式 " << name << ".\n";
             return true;
         }
@@ -148,6 +169,18 @@ static bool inputPolynomialFlow(Polynomial& poly, const string& name, bool& hasT
             }
         }
     }
+}
+
+// 综合输入流程：询问是否覆盖已有，然后只提供按项输入
+static bool inputPolynomialFlow(Polynomial& poly, const string& name, bool& hasTarget) {
+    if (hasTarget) {
+        bool ok = askReplaceIfExists(name, poly, hasTarget);
+        if (!ok) return false;
+    }
+
+    bool res = inputByItemsFlow(poly, name);
+    if (res) hasTarget = true;
+    return res;
 }
 
 void Menu::show() {
@@ -178,8 +211,6 @@ void Menu::show() {
                 if (sub == "0") break;
                 if (sub == "1") {
                     bool res = inputPolynomialFlow(A, "a", hasA);
-                    // res true 表示已成功保存 a； false 表示用户取消或切换
-                    // 如果取消但用户想输入 b，则 loop 回到子菜单继续选择即可
                 }
                 else if (sub == "2") {
                     bool res = inputPolynomialFlow(B, "b", hasB);
@@ -265,26 +296,31 @@ void Menu::show() {
                 cout << "输入无效，请输入数字：";
                 clearStdin();
             }
-            if (s == "1") {
-                double v = A.evaluate(x);
-                cout << "a(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
-            }
-            else if (s == "2") {
-                double v = B.evaluate(x);
-                cout << "b(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
-            }
-            else if (s == "3") {
-                if (hasA) {
+            try {
+                if (s == "1") {
                     double v = A.evaluate(x);
-                    cout << "a(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+                    cout << "a(" << Polynomial::formatNumber(x) << ") = " << Polynomial::formatNumber(v) << "\n";
                 }
-                if (hasB) {
+                else if (s == "2") {
                     double v = B.evaluate(x);
-                    cout << "b(" << x << ") = " << Polynomial::formatNumber(v) << "\n";
+                    cout << "b(" << Polynomial::formatNumber(x) << ") = " << Polynomial::formatNumber(v) << "\n";
+                }
+                else if (s == "3") {
+                    if (hasA) {
+                        double v = A.evaluate(x);
+                        cout << "a(" << Polynomial::formatNumber(x) << ") = " << Polynomial::formatNumber(v) << "\n";
+                    }
+                    if (hasB) {
+                        double v = B.evaluate(x);
+                        cout << "b(" << Polynomial::formatNumber(x) << ") = " << Polynomial::formatNumber(v) << "\n";
+                    }
+                }
+                else {
+                    cout << "无效选项。\n";
                 }
             }
-            else {
-                cout << "无效选项。\n";
+            catch (exception& e) {
+                cout << "错误（求值失败）: " << e.what() << "\n";
             }
         }
         else {
