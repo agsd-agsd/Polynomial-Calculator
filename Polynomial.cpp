@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
-#include <sstream>
 
 using namespace std;
 
@@ -20,8 +19,7 @@ void Polynomial::setTerms(const vector<Term>& t) {
 }
 
 void Polynomial::normalize() {
-    // 删除系数接近0的项、合并指数接近的项、按指数降序
-    // 1) 先过滤近零系数
+    // 1) 过滤近零系数
     vector<Term> tmp;
     tmp.reserve(terms.size());
     for (auto& term : terms) {
@@ -41,12 +39,11 @@ void Polynomial::normalize() {
             merged.push_back(t);
         }
     }
-    // 4) 再次过滤因合并产生的近零系数
+    // 4) 去掉合并造成的近零项
     terms.clear();
     for (auto& t : merged) {
         if (fabs(t.coeff) > EPS) terms.push_back(t);
     }
-    // 保证零多项式 terms 为空（isZero 检测）
 }
 
 bool Polynomial::isZero() const {
@@ -93,14 +90,8 @@ Polynomial Polynomial::mul(const Polynomial& other) const {
 pair<Polynomial, Polynomial> Polynomial::div(const Polynomial& divisor) const {
     if (divisor.isZero()) throw runtime_error("除以零多项式");
 
-    // Copy remainder as vector<Term>
-    vector<Term> R = terms;
-    vector<Term> Q; // quotient terms (unsimplified)
-    // make a helper to normalize R vector into Polynomial and get degree easily
     auto normalizeVec = [](vector<Term>& v) {
-        // filter near-zero, sort desc, merge near exponents
         vector<Term> tmp;
-        tmp.reserve(v.size());
         for (auto& t : v) if (fabs(t.coeff) > Polynomial::EPS) tmp.push_back(t);
         sort(tmp.begin(), tmp.end(), [](const Term& a, const Term& b) { return a.exp > b.exp; });
         vector<Term> merged;
@@ -111,53 +102,65 @@ pair<Polynomial, Polynomial> Polynomial::div(const Polynomial& divisor) const {
         v.swap(merged);
         };
 
-    // prepare divisor normalized vector
+    vector<Term> R = terms;
+    vector<Term> Q;
     vector<Term> D = divisor.terms;
     normalizeVec(D);
     if (D.empty()) throw runtime_error("除以零多项式");
 
-    // helper to get degree of vector (or -inf)
+    normalizeVec(R);
     auto vecDegree = [](const vector<Term>& v)->double {
         if (v.empty()) return -numeric_limits<double>::infinity();
         return v.front().exp;
         };
 
-    normalizeVec(R);
     double db = vecDegree(D);
     double leadD = D.front().coeff;
 
-    double dr = vecDegree(R);
-    if (!(dr >= db - Polynomial::EPS)) {
-        // degree less than divisor
-        Polynomial q;
-        Polynomial r(R);
-        return { q, r };
-    }
-
-    // main loop
     while (!R.empty()) {
         normalizeVec(R);
-        dr = vecDegree(R);
+        double dr = vecDegree(R);
         if (!(dr >= db - Polynomial::EPS)) break;
         double leadR = R.front().coeff;
-        double qExp = dr - db;           // quotient term exponent (may be fractional)
+        double qExp = dr - db;
         double qCoeff = leadR / leadD;
         Q.emplace_back(qCoeff, qExp);
-
-        // subtract qCoeff * x^qExp * D from R
-        // build shifted version of D
+        // subtract qCoeff * x^qExp * D
         for (auto& dt : D) {
             double newExp = dt.exp + qExp;
             double newCoeff = dt.coeff * qCoeff;
-            R.emplace_back(-newCoeff, newExp); // subtract
+            R.emplace_back(-newCoeff, newExp);
         }
-        // normalize R for next iteration
-        normalizeVec(R);
     }
 
     Polynomial quotient(Q);
     Polynomial remainder(R);
     return { quotient, remainder };
+}
+
+// <- 这是重点：确保签名与头文件一致（含 const）
+double Polynomial::evaluate(double x) const {
+    if (isZero()) return 0.0;
+
+    // 校验：若存在负指数且 x==0 则无法求值
+    for (const auto& t : terms) {
+        if (t.exp < 0.0 && fabs(x) < EPS) {
+            throw runtime_error("多项式包含负指数项，x = 0 无法求值（除以零）");
+        }
+        // 若 x < 0 且指数非整数，不支持复数
+        if (x < 0.0) {
+            double rounded = round(t.exp);
+            if (fabs(t.exp - rounded) > EPS) {
+                throw runtime_error("在 x < 0 且指数为非整数时，结果为复数，本程序不支持复数运算");
+            }
+        }
+    }
+
+    double res = 0.0;
+    for (const auto& t : terms) {
+        res += t.coeff * pow(x, t.exp);
+    }
+    return res;
 }
 
 string Polynomial::formatNumber(double v) {
@@ -204,16 +207,14 @@ string Polynomial::toString() const {
         if (fabs(coeff) < EPS) continue;
         string coeffStr = formatNumber(fabs(coeff));
         string expStr = formatExp(exp);
-        // build term string without leading sign, now using parentheses for exponents
         string termStr;
         if (fabs(exp) < EPS) {
-            // constant term
             termStr = coeffStr;
         }
         else {
             bool coeffIsOne = (fabs(fabs(coeff) - 1.0) < EPS);
             if (!coeffIsOne) termStr += coeffStr;
-            termStr += "x^(" + expStr + ")"; // <-- 始终用括号包住指数
+            termStr += "x^(" + expStr + ")";
         }
         if (first) {
             if (coeff < 0) oss << "-";
@@ -233,27 +234,15 @@ void Polynomial::print(ostream& out) const {
     out << toString();
 }
 
-// 请确保这个定义出现在 Polynomial.cpp 中，且与 Polynomial.hpp 中的声明完全一致
-double Polynomial::evaluate(double x) const {
-    if (isZero()) return 0.0;
-    // 检查负指数与 x==0 的冲突
+string Polynomial::toSequence() const {
+    if (isZero()) return "0";
+    ostringstream oss;
+    int n = 0;
+    for (auto& t : terms) if (fabs(t.coeff) > EPS) ++n;
+    oss << n;
     for (auto& t : terms) {
-        if (t.exp < 0.0 && fabs(x) < EPS) {
-            throw std::runtime_error("多项式包含负指数项，x = 0 无法求值（除以零）");
-        }
-        // 若 x<0 且指数非整数，pow 会产生复数，我们不支持复数
-        if (x < 0.0) {
-            double rounded = std::round(t.exp);
-            if (fabs(t.exp - rounded) > EPS) {
-                throw std::runtime_error("在 x < 0 且指数为非整数时，结果为复数，本程序不支持复数运算");
-            }
-        }
+        if (fabs(t.coeff) <= EPS) continue;
+        oss << ' ' << formatNumber(t.coeff) << ' ' << formatExp(t.exp);
     }
-
-    double res = 0.0;
-    for (auto& t : terms) {
-        res += t.coeff * std::pow(x, t.exp);
-    }
-    return res;
+    return oss.str();
 }
-
