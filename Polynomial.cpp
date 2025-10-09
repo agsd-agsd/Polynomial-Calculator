@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <sstream>
 
 using namespace std;
 
@@ -203,16 +204,16 @@ string Polynomial::toString() const {
         if (fabs(coeff) < EPS) continue;
         string coeffStr = formatNumber(fabs(coeff));
         string expStr = formatExp(exp);
-        // build term string without leading sign
+        // build term string without leading sign, now using parentheses for exponents
         string termStr;
         if (fabs(exp) < EPS) {
+            // constant term
             termStr = coeffStr;
         }
         else {
             bool coeffIsOne = (fabs(fabs(coeff) - 1.0) < EPS);
             if (!coeffIsOne) termStr += coeffStr;
-            termStr += "x";
-            if (!(fabs(exp - 1.0) < EPS)) termStr += "^" + expStr;
+            termStr += "x^(" + expStr + ")"; // <-- 始终用括号包住指数
         }
         if (first) {
             if (coeff < 0) oss << "-";
@@ -232,25 +233,27 @@ void Polynomial::print(ostream& out) const {
     out << toString();
 }
 
+// 请确保这个定义出现在 Polynomial.cpp 中，且与 Polynomial.hpp 中的声明完全一致
 double Polynomial::evaluate(double x) const {
     if (isZero()) return 0.0;
-    // If any term has negative exponent and x == 0 -> error
+    // 检查负指数与 x==0 的冲突
     for (auto& t : terms) {
-        if (t.exp < 0 && fabs(x) < EPS) {
-            throw runtime_error("多项式包含负指数项，x = 0 无法求值（会除以零）");
+        if (t.exp < 0.0 && fabs(x) < EPS) {
+            throw std::runtime_error("多项式包含负指数项，x = 0 无法求值（除以零）");
         }
-        // if x < 0 and exponent not integer, pow may be nan -> check
-        if (x < 0) {
-            double rounded = round(t.exp);
+        // 若 x<0 且指数非整数，pow 会产生复数，我们不支持复数
+        if (x < 0.0) {
+            double rounded = std::round(t.exp);
             if (fabs(t.exp - rounded) > EPS) {
-                throw runtime_error("在 x < 0 且指数为非整数时，结果为复数，本程序不支持复数运算");
+                throw std::runtime_error("在 x < 0 且指数为非整数时，结果为复数，本程序不支持复数运算");
             }
         }
     }
+
     double res = 0.0;
     for (auto& t : terms) {
-        double termVal = t.coeff * pow(x, t.exp);
-        res += termVal;
+        res += t.coeff * std::pow(x, t.exp);
     }
     return res;
 }
+
