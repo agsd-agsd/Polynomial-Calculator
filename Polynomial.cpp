@@ -125,7 +125,6 @@ pair<Polynomial, Polynomial> Polynomial::div(const Polynomial& divisor) const {
         double qExp = dr - db;
         double qCoeff = leadR / leadD;
         Q.emplace_back(qCoeff, qExp);
-        // subtract qCoeff * x^qExp * D
         for (auto& dt : D) {
             double newExp = dt.exp + qExp;
             double newCoeff = dt.coeff * qCoeff;
