@@ -37,7 +37,6 @@ public:
     Polynomial mul(const Polynomial& other) const;
     std::pair<Polynomial, Polynomial> div(const Polynomial& divisor) const;
 
-    // <- **这是关键声明**：签名必须和实现完全一致（含 const）
     double evaluate(double x) const;
 
     std::string toString() const;
@@ -49,4 +48,4 @@ public:
     static std::string formatExp(double e);
 };
 
-#endif // POLYNOMIAL_HPP
+#endif

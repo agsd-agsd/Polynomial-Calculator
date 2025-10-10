@@ -1,5 +1,4 @@
-﻿// Menu.cpp （已更新：在运算子菜单加入“在 x 处求值”，并保证只输出纯数字）
-#include "Menu.hpp"
+﻿#include "Menu.hpp"
 #include "Polynomial.hpp"
 #include <iostream>
 #include <string>
@@ -14,7 +13,6 @@ static void clearStdin() {
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
 }
 
-// 读取 double 或 q 取消（返回 codes: 0=ok,1=cancel,-1=invalid/EOF）
 static int readDoubleOrCancel(double &outVal) {
     string tok;
     if (!(cin >> tok)) return -1;
@@ -27,7 +25,6 @@ static int readDoubleOrCancel(double &outVal) {
     }
 }
 
-// 读取指数（double），支持 q 取消（返回 codes: 0=ok,1=cancel,-1=invalid/EOF）
 static int readExpOrCancel(double &outVal) {
     string tok;
     if (!(cin >> tok)) return -1;

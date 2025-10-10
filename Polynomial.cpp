@@ -138,7 +138,6 @@ pair<Polynomial, Polynomial> Polynomial::div(const Polynomial& divisor) const {
     return { quotient, remainder };
 }
 
-// <- 这是重点：确保签名与头文件一致（含 const）
 double Polynomial::evaluate(double x) const {
     if (isZero()) return 0.0;
 
